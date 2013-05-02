@@ -41,6 +41,7 @@ type Extensions struct {
 	FilterHTML   bool
 	FilterStyles bool
 	Dlists       bool
+	Table        bool
 }
 
 type Parser struct {

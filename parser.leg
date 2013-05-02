@@ -88,6 +88,15 @@ const (
 	HRULE
 	REFERENCE
 	NOTE
+  TABLE
+  TABLEHEAD
+  TABLEBODY
+  TABLEROW
+  TABLECELL
+  CELLSPAN
+  TABLECAPTION
+  TABLELABEL
+  TABLESEPARATOR
 	DEFINITIONLIST
 	DEFTITLE
 	DEFDATA
@@ -128,6 +137,7 @@ Block =     BlankLine*
             | BulletList
             | HtmlBlock
             | StyleBlock
+            | &{ p.extension.Table } Table
             | Para
             | Plain )
 
@@ -847,6 +857,92 @@ DefLoose	= BlankLine &Defmark ListLoose
 Defmark	= NonindentSpace (':' | '~') Spacechar+
 DefMarker	= &{ p.extension.Dlists } Defmark
 
+Table = a:StartList b:StartList (TableCaption { b = cons($$, b) })?
+    TableBody { $$.key = TABLEHEAD; a = cons($$, a) }
+    (SeparatorLine { append_list($$, a) } )
+    (TableBody { a = cons($$, a) } )
+    (BlankLine !TableCaption TableBody { a = cons($$, a) }
+        &(TableCaption | BlankLine) )*
+    ( (TableCaption { b = cons($$, b) } &BlankLine) | &BlankLine)
+    # Requires blank line to end table "block"
+    {
+        if b != nil { append_list(b,a) }
+        $$ = p.mkList(TABLE, a)
+    }
+
+TableBody = a:StartList (TableRow { a = cons($$, a) })+
+    { $$ = p.mkList(TABLEBODY, a) }
+
+TableRow = a:StartList
+    (!SeparatorLine &(TableLine)
+    CellDivider?
+    (TableCell { a = cons($$, a) })+ ) Sp Newline
+    { $$ = p.mkList(TABLEROW, a) }
+
+TableLine = (!Newline !CellDivider .)* CellDivider
+
+TableCell = ExtendedCell | EmptyCell | FullCell
+
+ExtendedCell = (EmptyCell | FullCell) <CellDivider+>
+    {
+        span := p.mkString(yytext)
+        span.key = CELLSPAN
+        span.next = $$.children
+        $$.children = span
+    }
+
+CellStr = < (!CellDivider NormalChar) (!CellDivider NormalChar | '_'+ &Alphanumeric)* >
+        { $$ = p.mkString(yytext) }
+
+FullCell = Sp a:StartList  ((!CellDivider CellStr | !Newline !Endline !CellDivider !Str !(Sp &CellDivider) Inline ) { a = cons($$, a) })+
+    Sp ( CellDivider )?
+    { $$ = p.mkList(TABLECELL, a) }
+
+EmptyCell = Sp CellDivider
+{ $$ = p.mkElem(TABLECELL) }
+
+SeparatorLine = a:StartList 
+    &(TableLine)
+    CellDivider?
+    ( AlignmentCell { a = cons($$, a) })+ Sp Newline
+    {
+        $$ = p.mkStringFromList(a, false);
+        $$.key = TABLESEPARATOR;
+    }
+
+AlignmentCell = Sp (!CellDivider ( LeftAlignWrap | CenterAlignWrap | RightAlignWrap | LeftAlign | CenterAlign | RightAlign))
+    Sp ( CellDivider )?
+
+LeftAlignWrap = ':'? '-'+ '+' &(!'-' !':')
+    { $$ = p.mkString("L");}
+
+LeftAlign = ':'? '-'+ &(!'-' !':')
+    { $$ = p.mkString("l");}
+
+CenterAlignWrap = ':' '-'* '+' ':' &(!'-' !':')
+    { $$ = p.mkString("C");}
+
+CenterAlign = ':' '-'* ':' &(!'-' !':')
+    { $$ = p.mkString("c");}
+
+RightAlignWrap = '-'+ ':' '+' &(!'-' !':')
+    { $$ = p.mkString("R");}
+
+RightAlign = '-'+ ':' &(!'-' !':')
+    { $$ = p.mkString("r");}
+
+CellDivider = '|'
+
+TableCaption = b:StartList a:Label
+( c:Label { b = c; b.key = TABLELABEL;})? Sp Newline
+{
+    $$ = a
+    $$.key = TABLECAPTION
+    if b != nil && b.key == TABLELABEL {
+        b.next = $$.children
+        $$.children = b
+    }
+}
 
 %%
 
@@ -870,6 +966,18 @@ func reverse(list *element) (new *element) {
 		list = next
 	}
 	return
+}
+
+/* append_list - add element to end of list */
+func append_list(new *element, list *element) {
+  step := list
+
+  for step.next != nil {
+    step = step.next
+  }
+
+  new.next = nil
+  step.next = new
 }
 
 /*
