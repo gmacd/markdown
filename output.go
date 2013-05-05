@@ -44,6 +44,10 @@ type htmlOut struct {
 
 	notenum  int
 	endNotes []*element /* List of endnotes to print after main content. */
+
+	tableColumn    int
+	tableAlignment string
+	cellType       rune
 }
 
 func ToHTML(w Writer) Formatter {
@@ -257,6 +261,85 @@ func (w *htmlOut) elem(elt *element) *htmlOut {
 			s = fmt.Sprintf(`<a class="noteref" id="fnref%d" href="#fn%d" title="Jump to note %d">[%d]</a>`,
 				nn, nn, nn, nn)
 		}
+	case TABLE:
+		w.s("\n\n<table>\n")
+		w.children(elt)
+		w.s("</table>\n")
+	case TABLESEPARATOR:
+		w.tableAlignment = elt.contents.str
+	case TABLECAPTION:
+		label := ""
+		// TODO labels
+		if elt.children.key == TABLELABEL {
+			label = labelFromString(elt.children.children.str)
+		} else {
+			label = labelFromString(elt.children.str)
+		}
+		w.s(fmt.Sprintf("<caption id=\"%s\">", label))
+		w.children(elt)
+		w.s("</caption>\n")
+	case TABLELABEL:
+		break
+	case TABLEHEAD:
+		w.s("<colgroup>\n")
+		for _, alignmentChar := range w.tableAlignment {
+			switch alignmentChar {
+			case 'r':
+				w.s("<col style=\"text-align:right;\"/>\n")
+			case 'R':
+				w.s("<col style=\"text-align:right;\" class=\"extended\"/>\n")
+			case 'c':
+				w.s("<col style=\"text-align:center;\"/>\n")
+			case 'C':
+				w.s("<col style=\"text-align:center;\" class=\"extended\"/>\n")
+			case 'l':
+				w.s("<col style=\"text-align:left;\"/>\n")
+			case 'L':
+				w.s("<col style=\"text-align:left;\" class=\"extended\"/>\n")
+			}
+		}
+		w.s("</colgroup>\n")
+		w.cellType = 'h'
+		w.s("\n<thead>\n")
+		w.children(elt)
+		w.s("</thead>\n")
+		w.cellType = 'd'
+	case TABLEBODY:
+		w.s("\n<tbody>\n")
+		w.children(elt)
+		w.s("</tbody>\n")
+	case TABLEROW:
+		w.s("<tr>\n")
+		w.tableColumn = 0
+		w.children(elt)
+		w.s("</tr>\n")
+	case TABLECELL:
+		switch w.tableAlignment[w.tableColumn] {
+		case 'r':
+			w.s(fmt.Sprintf("\t<t%c style=\"text-align:right;\"", w.cellType))
+		case 'R':
+			w.s(fmt.Sprintf("\t<t%c style=\"text-align:right;\"", w.cellType))
+		case 'c':
+			w.s(fmt.Sprintf("\t<t%c style=\"text-align:center;\"", w.cellType))
+		case 'C':
+			w.s(fmt.Sprintf("\t<t%c style=\"text-align:center;\"", w.cellType))
+		case 'l':
+			w.s(fmt.Sprintf("\t<t%c style=\"text-align:left;\"", w.cellType))
+		case 'L':
+			w.s(fmt.Sprintf("\t<t%c style=\"text-align:left;\"", w.cellType))
+		}
+		if elt.children != nil && elt.children.key == CELLSPAN {
+			w.s(fmt.Sprintf(" colspan=\"%d\"", len(elt.children.contents.str)+1))
+		}
+		w.s(">")
+		w.padded = 2
+		if elt.children != nil {
+			w.children(elt)
+		}
+		w.s(fmt.Sprintf("</t%c>\n", w.cellType))
+		w.tableColumn++
+	case CELLSPAN:
+		break
 	default:
 		log.Fatalf("htmlOut.elem encountered unknown element key = %d\n", elt.key)
 	}
@@ -278,4 +361,29 @@ func (w *htmlOut) printEndnotes() {
 		w.br().s("</li>")
 	}
 	w.br().s("</ol>")
+}
+
+func labelFromString(str string) string {
+	valid := false
+	label := ""
+
+	for _, c := range str {
+		if valid {
+			// can relax on following characters
+			if (c >= '0' && c <= '9') ||
+				(c >= 'A' && c <= 'Z') ||
+				(c >= 'a' && c <= 'z') ||
+				(c == '.') || (c == '_') || (c == '-') || (c == ':') {
+				label += string(c)
+			}
+		} else {
+			// need alpha as first character
+			if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') {
+				label += string(c)
+				valid = true
+			}
+		}
+	}
+
+	return strings.ToLower(label)
 }

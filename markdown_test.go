@@ -9,10 +9,15 @@ import (
 	"testing"
 )
 
+const (
+	TestHtml = 1 << iota
+	TestGroff
+)
+
 // for each pair of .text/.html files in the given subdirectory
 // of `./tests' compare the expected html output with
 // the output of Parser.Markdown.
-func runDirTests(dir string, t *testing.T) {
+func runDirTests(dir string, t *testing.T, testsToRun int) {
 
 	dirPath := filepath.Join("tests", dir)
 	f, err := os.Open(dirPath)
@@ -29,16 +34,23 @@ func runDirTests(dir string, t *testing.T) {
 	var buf bytes.Buffer
 	fHTML := ToHTML(&buf)
 	fGroff := ToGroffMM(&buf)
-	p := NewParser(nil)
+
+	p := NewParser(&Extensions{Table: true})
+
 	for _, name := range names {
 		if filepath.Ext(name) != ".text" {
 			continue
 		}
-		if err = compareOutput(&buf, fHTML, ".html", filepath.Join(dirPath, name), p); err != nil {
-			t.Error(err)
+
+		if (testsToRun & TestHtml) != 0 {
+			if err = compareOutput(&buf, fHTML, ".html", filepath.Join(dirPath, name), p); err != nil {
+				t.Error(err)
+			}
 		}
-		if err = compareOutput(&buf, fGroff, ".mm", filepath.Join(dirPath, name), p); err != nil {
-			t.Error(err)
+		if (testsToRun & TestGroff) != 0 {
+			if err = compareOutput(&buf, fGroff, ".mm", filepath.Join(dirPath, name), p); err != nil {
+				t.Error(err)
+			}
 		}
 	}
 }
@@ -75,7 +87,11 @@ func compareOutput(w *bytes.Buffer, f Formatter, ext string, textPath string, p 
 }
 
 func TestMarkdown103(t *testing.T) {
-	runDirTests("md1.0.3", t)
+	runDirTests("md1.0.3", t, TestHtml|TestGroff)
+}
+
+func TestMultiMarkdown(t *testing.T) {
+	runDirTests("MultiMarkdown", t, TestHtml)
 }
 
 // This test will make the test run fail with a
