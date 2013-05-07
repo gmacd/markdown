@@ -934,7 +934,7 @@ RightAlign = '-'+ ':' &(!'-' !':')
 CellDivider = '|'
 
 TableCaption = b:StartList a:Label
-( c:Label { b = c; b.key = TABLELABEL;})? Sp Newline
+( c:Label { b = c; b.key = TABLELABEL })? Sp Newline
 {
     $$ = a
     $$.key = TABLECAPTION

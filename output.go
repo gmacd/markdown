@@ -269,11 +269,10 @@ func (w *htmlOut) elem(elt *element) *htmlOut {
 		w.tableAlignment = elt.contents.str
 	case TABLECAPTION:
 		label := ""
-		// TODO labels
 		if elt.children.key == TABLELABEL {
-			label = labelFromString(elt.children.children.str)
+			label = labelFromElementList(elt.children.children)
 		} else {
-			label = labelFromString(elt.children.str)
+			label = labelFromElementList(elt.children)
 		}
 		w.s(fmt.Sprintf("<caption id=\"%s\">", label))
 		w.children(elt)
@@ -363,24 +362,45 @@ func (w *htmlOut) printEndnotes() {
 	w.br().s("</ol>")
 }
 
-func labelFromString(str string) string {
+func rawElementToString(elt *element) string {
+	if elt.key == LINK {
+		return rawElementListToString(elt.contents.link.label)
+	} else if elt.contents.str != "" {
+		return elt.contents.str
+	} else {
+		return rawElementListToString(elt.children)
+	}
+	return ""
+}
+
+func rawElementListToString(list *element) string {
+	str := ""
+	for list != nil {
+		str += list.contents.str
+		list = list.next
+	}
+	return str
+}
+
+func labelFromElementList(list *element) string {
 	valid := false
+	str := rawElementListToString(list)
 	label := ""
 
 	for _, c := range str {
-		if valid {
-			// can relax on following characters
+		if !valid {
+			// Need alpha as first character
+			if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') {
+				label += string(c)
+				valid = true
+			}
+		} else {
+			// Subsequent characters
 			if (c >= '0' && c <= '9') ||
 				(c >= 'A' && c <= 'Z') ||
 				(c >= 'a' && c <= 'z') ||
 				(c == '.') || (c == '_') || (c == '-') || (c == ':') {
 				label += string(c)
-			}
-		} else {
-			// need alpha as first character
-			if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') {
-				label += string(c)
-				valid = true
 			}
 		}
 	}
